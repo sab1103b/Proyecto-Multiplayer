@@ -159,6 +159,10 @@ PrefabInstance:
       value: Draw Canvas (1)
       objectReference: {fileID: 0}
     - target: {fileID: 4655525768510165817, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
+      propertyPath: m_TargetTexture
+      value: 
+      objectReference: {fileID: 8400000, guid: 00703183727944047a0e651ce6e3467d, type: 2}
+    - target: {fileID: 4655525768510165817, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
       propertyPath: orthographic size
       value: 1.5
       objectReference: {fileID: 0}
@@ -166,6 +170,10 @@ PrefabInstance:
       propertyPath: m_CullingMask.m_Bits
       value: 4294967295
       objectReference: {fileID: 0}
+    - target: {fileID: 7055979302869838929, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 5b3c2361bb3642d419b9a7356f69b5d9, type: 2}
     - target: {fileID: 7800972712613236577, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.6
@@ -357,7 +365,7 @@ Transform:
   m_GameObject: {fileID: 237603123}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: -0.7071068, w: 0.7071068}
-  m_LocalPosition: {x: 2.584, y: 0.401, z: -0.071}
+  m_LocalPosition: {x: 2.08, y: 1.08, z: -0.071}
   m_LocalScale: {x: 0.04, y: 0.04, z: 0.04}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -408,7 +416,7 @@ Rigidbody:
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
   m_UseGravity: 0
-  m_IsKinematic: 0
+  m_IsKinematic: 1
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
@@ -752,6 +760,10 @@ PrefabInstance:
       value: Draw Canvas (2)
       objectReference: {fileID: 0}
     - target: {fileID: 4655525768510165817, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
+      propertyPath: m_TargetTexture
+      value: 
+      objectReference: {fileID: 8400000, guid: fc50354914133164dacdb6754716420e, type: 2}
+    - target: {fileID: 4655525768510165817, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
       propertyPath: orthographic size
       value: 1.5
       objectReference: {fileID: 0}
@@ -759,6 +771,10 @@ PrefabInstance:
       propertyPath: m_CullingMask.m_Bits
       value: 4294967295
       objectReference: {fileID: 0}
+    - target: {fileID: 7055979302869838929, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: e58e1059d1b3e044f974cf7572dafaf5, type: 2}
     - target: {fileID: 7800972712613236577, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.6
@@ -1340,7 +1356,7 @@ Rigidbody:
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
   m_UseGravity: 0
-  m_IsKinematic: 0
+  m_IsKinematic: 1
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
@@ -1410,7 +1426,7 @@ Transform:
   m_GameObject: {fileID: 1110573429}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: -0.7071068, w: 0.7071068}
-  m_LocalPosition: {x: 2.584, y: 0.247, z: -0.586}
+  m_LocalPosition: {x: 2.08, y: 1.08, z: -0.586}
   m_LocalScale: {x: 0.04, y: 0.04, z: 0.04}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1574,6 +1590,10 @@ PrefabInstance:
       value: Draw Canvas (3)
       objectReference: {fileID: 0}
     - target: {fileID: 4655525768510165817, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
+      propertyPath: m_TargetTexture
+      value: 
+      objectReference: {fileID: 8400000, guid: 38ec81fbeb56fb34da2e7326acaa846a, type: 2}
+    - target: {fileID: 4655525768510165817, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
       propertyPath: orthographic size
       value: 1.5
       objectReference: {fileID: 0}
@@ -1581,6 +1601,10 @@ PrefabInstance:
       propertyPath: m_CullingMask.m_Bits
       value: 4294967295
       objectReference: {fileID: 0}
+    - target: {fileID: 7055979302869838929, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 2699656fef3974240b7bd901e2655bba, type: 2}
     - target: {fileID: 7800972712613236577, guid: 32fa7a6dfff37be4fbbe27f23b01b890, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.6
@@ -1836,7 +1860,7 @@ Rigidbody:
   m_ImplicitCom: 1
   m_ImplicitTensor: 1
   m_UseGravity: 0
-  m_IsKinematic: 0
+  m_IsKinematic: 1
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
@@ -1906,7 +1930,7 @@ Transform:
   m_GameObject: {fileID: 1570821793}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: -0.7071068, w: 0.7071068}
-  m_LocalPosition: {x: 2.584, y: 0.247, z: -0.27}
+  m_LocalPosition: {x: 2.08, y: 1.08, z: -0.27}
   m_LocalScale: {x: 0.04, y: 0.04, z: 0.04}
   m_ConstrainProportionsScale: 0
   m_Children:
