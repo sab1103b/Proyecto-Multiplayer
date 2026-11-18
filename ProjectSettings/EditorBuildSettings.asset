@@ -11,6 +11,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Start Scene 1.unity
     guid: 4233206b1b3189344adb104b78a33a67
+  - enabled: 1
+    path: Assets/Scenes/Environment_Ana.unity
+    guid: 3c528856585dc074a9ccaea50157cc2b
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 779e20343dd2b1e499a94678b490b778, type: 2}
