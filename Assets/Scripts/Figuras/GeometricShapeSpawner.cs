@@ -1,4 +1,4 @@
-
+using CuboVR.Networking;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -16,31 +16,35 @@ public class GeometricShapeSpawner : MonoBehaviour
     [SerializeField] private XRBaseInteractor leftHandInteractor;
     [SerializeField] private XRBaseInteractor rightHandInteractor;
 
-    [Header("3. Ray Interactors para detectar la selecciÛn UI")]
+    [Header("3. Ray Interactors para detectar la selecci√≥n UI")]
     [SerializeField] private XRRayInteractor leftUIRay;
     [SerializeField] private XRRayInteractor rightUIRay;
 
     [Header("4. Prefabs 3D")]
     [SerializeField] private XRGrabInteractable[] shapePrefabs;
 
+    public XRGrabInteractable[] ShapePrefabs => shapePrefabs;
+
+    public XRGrabInteractable GetShapePrefab(int index)
+    {
+        if (shapePrefabs == null || index < 0 || index >= shapePrefabs.Length) return null;
+        return shapePrefabs[index];
+    }
 
     public void SpawnShapeInHand(int shapeIndex)
     {
-        // Buscar Interaction Manager autom·ticamente
+        // Buscar Interaction Manager autom√°ticamente
         if (interactionManager == null)
             interactionManager = FindFirstObjectByType<XRInteractionManager>();
 
         // Validar figura seleccionada
-        if (shapePrefabs == null ||
-            shapeIndex < 0 ||
-            shapeIndex >= shapePrefabs.Length ||
-            shapePrefabs[shapeIndex] == null)
+        if (GetShapePrefab(shapeIndex) == null)
         {
-            Debug.LogWarning("Figura no v·lida.");
+            Debug.LogWarning("Figura no v√°lida.");
             return;
         }
 
-        // Identificar quÈ mano seleccionÛ el botÛn
+        // Identificar qu√© mano seleccion√≥ el bot√≥n
         XRBaseInteractor targetHand = GetActiveHandInteractor();
 
         if (interactionManager == null || targetHand == null)
@@ -52,34 +56,35 @@ public class GeometricShapeSpawner : MonoBehaviour
         // Soltar figura anterior de esa mano
         if (targetHand.hasSelection)
         {
-            IXRSelectInteractable currentShape =
-                targetHand.firstInteractableSelected;
-
-            interactionManager.SelectExit(
-                (IXRSelectInteractor)targetHand,
-                currentShape
-            );
+            IXRSelectInteractable currentShape = targetHand.firstInteractableSelected;
+            interactionManager.SelectExit((IXRSelectInteractor)targetHand, currentShape);
         }
 
         // Obtener punto de agarre de la mano
         Transform attachPoint = targetHand.GetAttachTransform(null);
 
-        // Crear figura directamente en la mano
-        XRGrabInteractable newShape = Instantiate(
-            shapePrefabs[shapeIndex],
-            attachPoint.position,
-            attachPoint.rotation
-        );
+        // En sala multijugador: la figura se crea en red para que todos la vean.
+        var net = NetworkShapeSpawner.Instance;
+        if (net != null && net.IsReady)
+        {
+            net.RequestShape(shapeIndex, attachPoint.position, attachPoint.rotation, go =>
+            {
+                var grab = go != null ? go.GetComponent<XRGrabInteractable>() : null;
+                if (grab != null && targetHand != null && !targetHand.hasSelection)
+                    interactionManager.SelectEnter((IXRSelectInteractor)targetHand, (IXRSelectInteractable)grab);
+            });
+            Debug.Log("Figura pedida en red para: " + targetHand.name);
+            return;
+        }
+
+        // Sin red (lobby / pruebas): figura local
+        XRGrabInteractable newShape = Instantiate(shapePrefabs[shapeIndex], attachPoint.position, attachPoint.rotation);
 
         // Agarrar figura con la mano identificada
-        interactionManager.SelectEnter(
-            (IXRSelectInteractor)targetHand,
-            (IXRSelectInteractable)newShape
-        );
+        interactionManager.SelectEnter((IXRSelectInteractor)targetHand, (IXRSelectInteractable)newShape);
 
         Debug.Log("Figura generada en: " + targetHand.name);
     }
-
 
     private XRBaseInteractor GetActiveHandInteractor()
     {
@@ -110,10 +115,7 @@ public class GeometricShapeSpawner : MonoBehaviour
         return rightHandInteractor;
     }
 
-
-    private bool IsHandPointingAt(
-        XRRayInteractor ray,
-        GameObject targetButton)
+    private bool IsHandPointingAt(XRRayInteractor ray, GameObject targetButton)
     {
         if (ray == null || targetButton == null)
             return false;
@@ -121,19 +123,14 @@ public class GeometricShapeSpawner : MonoBehaviour
         if (!ray.TryGetUIModel(out TrackedDeviceModel model))
             return false;
 
-        if (!model.currentRaycast.isValid ||
-            model.currentRaycast.gameObject == null)
+        if (!model.currentRaycast.isValid || model.currentRaycast.gameObject == null)
             return false;
 
-        Button hitButton =
-            model.currentRaycast.gameObject.GetComponentInParent<Button>();
-
-        Button selected =
-            targetButton.GetComponentInParent<Button>();
+        Button hitButton = model.currentRaycast.gameObject.GetComponentInParent<Button>();
+        Button selected = targetButton.GetComponentInParent<Button>();
 
         return hitButton != null && hitButton == selected;
     }
-
 
     private bool IsHandOverAnyButton(XRRayInteractor ray)
     {
@@ -143,11 +140,9 @@ public class GeometricShapeSpawner : MonoBehaviour
         if (!ray.TryGetUIModel(out TrackedDeviceModel model))
             return false;
 
-        if (!model.currentRaycast.isValid ||
-            model.currentRaycast.gameObject == null)
+        if (!model.currentRaycast.isValid || model.currentRaycast.gameObject == null)
             return false;
 
-        return model.currentRaycast.gameObject
-            .GetComponentInParent<Button>() != null;
+        return model.currentRaycast.gameObject.GetComponentInParent<Button>() != null;
     }
 }
