@@ -80,24 +80,41 @@ namespace CuboVR.Networking
                 if (faces[f] == null) continue;
                 byte[] png = faces[f].EncodeToPNG();
                 if (png == null) continue;
+                yield return SendFace(f, png, clientId);
+            }
+        }
 
-                int total = png.Length;
-                int sentThisFrame = 0;
-                for (int offset = 0; offset < total; offset += chunkSize)
+        /// <summary>Manda una cara a un cliente (clientId) o a todos los que no son el servidor (null).</summary>
+        IEnumerator SendFace(int f, byte[] png, ulong? clientId)
+        {
+            int total = png.Length;
+            int sentThisFrame = 0;
+            for (int offset = 0; offset < total; offset += chunkSize)
+            {
+                if (!IsServer) yield break;
+                if (clientId.HasValue && !NetworkManager.ConnectedClients.ContainsKey(clientId.Value)) yield break;
+                int len = Mathf.Min(chunkSize, total - offset);
+                byte[] chunk = new byte[len];
+                Buffer.BlockCopy(png, offset, chunk, 0, len);
+                if (clientId.HasValue) SnapshotChunkRpc(f, total, offset, chunk, RpcTarget.Single(clientId.Value, RpcTargetUse.Temp));
+                else SnapshotChunkRpc(f, total, offset, chunk, RpcTarget.NotServer);
+
+                if (++sentThisFrame >= chunksPerFrame)
                 {
-                    if (!IsServer || !NetworkManager.ConnectedClients.ContainsKey(clientId)) yield break;
-                    int len = Mathf.Min(chunkSize, total - offset);
-                    byte[] chunk = new byte[len];
-                    Buffer.BlockCopy(png, offset, chunk, 0, len);
-                    SnapshotChunkRpc(f, total, offset, chunk, RpcTarget.Single(clientId, RpcTargetUse.Temp));
-
-                    if (++sentThisFrame >= chunksPerFrame)
-                    {
-                        sentThisFrame = 0;
-                        yield return null;
-                    }
+                    sentThisFrame = 0;
+                    yield return null;
                 }
             }
+        }
+
+        // ---------------- Imagen importada por el profesor ----------------
+        /// <summary>El profesor cargó una imagen en esta cara: se la manda a todos los estudiantes.</summary>
+        public void EnviarCaraATodos(CanvasManager face)
+        {
+            int index = Array.IndexOf(faces, face);
+            if (!IsServer || index < 0) return;
+            byte[] png = face.EncodeToPNG();
+            if (png != null) StartCoroutine(SendFace(index, png, null));
         }
 
         [Rpc(SendTo.SpecifiedInParams)]

@@ -54,7 +54,7 @@ namespace CuboVR.Networking.UI
                 cm.Discovery.RoomsChanged += RefreshList;
                 cm.StartBrowsing();
             }
-            SetStatus("Elige una sala o escribe su código.");
+            SetStatus("Arma el código de la sala con los cubos.");
             code = "";
             RefreshCode();
             RefreshList();
@@ -127,11 +127,11 @@ namespace CuboVR.Networking.UI
                 b.gameObject.SetActive(true);
                 b.gameObject.name = "Sala_" + room.code;
                 var label = b.GetComponentInChildren<Text>(true);
+                // Solo se muestra que la sala existe: sin código y sin poder entrar con un clic.
+                // Para entrar hay que armar el código con los cubos (el profesor lo comparte).
                 if (label != null)
-                    label.text = $"{room.name}   ·   Código {room.code}   ·   {room.players - 1}/{room.maxPlayers - 1}";
-                b.interactable = !room.IsFull;
-                var r = room;
-                b.onClick.AddListener(() => ConnectionManager.Instance.JoinRoom(r));
+                    label.text = $"{room.name}   ·   {room.players - 1}/{room.maxPlayers - 1} estudiantes" + (room.IsFull ? "   ·   llena" : "");
+                b.enabled = false; // deja de ser botón (no se resalta ni se puede pulsar)
                 roomButtons.Add(b);
             }
         }
@@ -139,7 +139,6 @@ namespace CuboVR.Networking.UI
         void OnState(ConnectionState state, string message)
         {
             bool idle = state == ConnectionState.EnLobby;
-            foreach (var b in roomButtons) if (b != null) b.interactable = idle;
             if (joinButton != null) joinButton.interactable = idle && code.Length == codeLength;
             SetStatus(message);
         }

@@ -71,6 +71,7 @@ public static class ConfigurarMultijugador
         CrearLobby(spawns);
         CrearPanelSala();
         ConfigurarManoLevantada();
+        ConstruirConsola();
         AgregarManipulacionConRayo();
         ConfigurarObjetosCompartidos();
         ConfigurarPrefabsFiguras();
@@ -333,7 +334,7 @@ public static class ConfigurarMultijugador
         var canvas = CanvasMundo("Panel_Salas", contenido.transform, new Vector3(0, 1.6f, 1.4f), 760, 620, true);
         var card = Img(canvas, "Fondo", 0, 0, 760, 620, CardBg);
         Txt(card, "Titulo", "Unirse a una sala", fBold, 52, Color.white, 40, 26, 680, 70, TextAnchor.MiddleLeft);
-        Txt(card, "Lbl_Salas", "SALAS EN LA RED  ·  o arma el código con los cubos", fSemi, 24, TextoSuave, 40, 105, 680, 40, TextAnchor.MiddleLeft);
+        Txt(card, "Lbl_Salas", "SALAS CREADAS  ·  pide el código al profesor", fSemi, 24, TextoSuave, 40, 105, 680, 40, TextAnchor.MiddleLeft);
         var lista = Vacio(card, "Lista_Salas", 40, 155, 680, 360);
         var vlg = lista.AddComponent<VerticalLayoutGroup>();
         vlg.spacing = 12; vlg.childControlHeight = true; vlg.childControlWidth = true;
@@ -354,14 +355,18 @@ public static class ConfigurarMultijugador
         lista_.statusText = estado;
         lista_.digitButtons = new Button[0]; // el código se arma con cubos (CodigoConCubos)
 
-        // ---- A la derecha: columna de botones 0-9 (cada uno suelta un cubo con su número)
-        Vector3 posNumeros = new Vector3(0.62f, 1.15f, 0.85f);
-        var numeros = CanvasMundo("Botones_Numeros", contenido.transform, posNumeros, 140, 1000, true);
+        // ---- A la derecha: botones 0-9 en dos columnas (0-4 y 5-9); cada uno suelta un cubo con su número
+        Vector3 posNumeros = new Vector3(0.66f, 1.15f, 0.85f);
+        const float NW = 260, NH = 506;
+        var numeros = CanvasMundo("Botones_Numeros", contenido.transform, posNumeros, NW, NH, true);
         numeros.transform.localRotation = Quaternion.LookRotation(new Vector3(posNumeros.x, 0, posNumeros.z).normalized, Vector3.up);
-        Img(numeros, "Fondo", 0, 0, 140, 1000, CardBg);
+        Img(numeros, "Fondo", 0, 0, NW, NH, CardBg);
         var botones = new Button[10];
         for (int n = 0; n <= 9; n++)
-            botones[n] = Boton(numeros, "Btn_" + n, n.ToString(), Estudiante, Color.white, 12, 18 + n * 96, 116, 86, 48, sClick);
+        {
+            int columna = n / 5, fila = n % 5;
+            botones[n] = Boton(numeros, "Btn_" + n, n.ToString(), Estudiante, Color.white, 12 + columna * 120, 18 + fila * 96, 116, 86, 48, sClick);
+        }
 
         // ---- Al frente, abajo: mesa con 4 huecos
         var mesa = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -624,6 +629,297 @@ public static class ConfigurarMultijugador
         reporte.Add("✓ Mano levantada: panel bajo la cara de control + punto para el invitado dentro del cubo");
     }
 
+    // =====================================================================
+    // 6c. CONSOLA DEL PROFESOR (grabar, tableros, figuras, mano levantada)
+    // =====================================================================
+    [MenuItem("Cubo VR/Construir consola del profesor")]
+    static void MenuConsola()
+    {
+        reporte = new List<string>();
+        CargarRecursos();
+        ConstruirConsola();
+        CorregirManos();
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        EditorUtility.DisplayDialog("Cubo VR", string.Join("\n", reporte) + "\n\nGuarda la escena con Ctrl+S.", "OK");
+    }
+
+    /// <summary>
+    /// Mesa frente al profesor, dentro del cubo. Vista desde el profesor, de izquierda a derecha:
+    ///   [Tableros 1-2-3 + ficha]  [Perilla STOP/REC]  [Botón Figuras]  [Mano levantada]
+    /// Encima de cada apartado flota su pantalla. Si la consola ya existe se reconstruye en el mismo lugar.
+    /// </summary>
+    static void ConstruirConsola()
+    {
+        var spawns = Object.FindFirstObjectByType<NetworkSpawnPoints>();
+        if (spawns == null || spawns.profesorSpawn == null)
+        {
+            reporte.Add("? Consola: falta 'Spawn Points' (corre primero Configurar multijugador)");
+            return;
+        }
+        var panelMano = GameObject.Find("Panel_ManoLevantada");
+        var figuras = BuscarEnEscena("Canvas_Figuras");
+
+        // ---- Raíz (se respeta donde la hayas movido) ----
+        var p = spawns.profesorSpawn;
+        Vector3 adelante = Vector3.ProjectOnPlane(p.forward, Vector3.up).normalized;
+        Vector3 pos = p.position + adelante * 0.75f;
+        Quaternion rot = Quaternion.LookRotation(adelante, Vector3.up);
+        var vieja = GameObject.Find("Consola_Profesor");
+        if (vieja != null)
+        {
+            pos = vieja.transform.position;
+            rot = vieja.transform.rotation;
+            if (panelMano != null && panelMano.transform.IsChildOf(vieja.transform))
+                Undo.SetTransformParent(panelMano.transform, null, "Consola");
+            Undo.DestroyObjectImmediate(vieja);
+        }
+        var root = new GameObject("Consola_Profesor");
+        Undo.RegisterCreatedObjectUndo(root, "Consola");
+        root.transform.SetPositionAndRotation(pos, rot);
+        var t = root.transform;
+
+        // ---- Mesa ----
+        const float Alto = 0.85f; // altura de la superficie
+        var matMesa = CrearMaterial("Consola_Mesa", Hex("2B333C"));
+        Pieza(t, PrimitiveType.Cube, "Cuerpo", new Vector3(0, Alto * 0.5f - 0.03f, 0.02f), new Vector3(1.7f, Alto - 0.06f, 0.42f), matMesa, true);
+        Pieza(t, PrimitiveType.Cube, "Superficie", new Vector3(0, Alto - 0.03f, 0), new Vector3(1.8f, 0.06f, 0.5f), CrearMaterial("Consola_Superficie", Gris), true);
+
+        // =================== APARTADO 2: TABLEROS ===================
+        var consola = root.AddComponent<ConsolaProfesor>();
+        var matEspacio = CrearMaterial("Consola_Espacio", Hex("3F4952"));
+        float[] xs = { -0.72f, -0.56f, -0.40f };
+        consola.espacios = new Transform[3];
+        consola.marcasEspacios = new Renderer[3];
+        for (int i = 0; i < 3; i++)
+        {
+            var espacio = Pieza(t, PrimitiveType.Cube, $"Espacio_Tablero_{i + 1}", new Vector3(xs[i], Alto + 0.003f, 0.08f), new Vector3(0.13f, 0.006f, 0.13f), matEspacio, false);
+            consola.espacios[i] = espacio.transform;
+            consola.marcasEspacios[i] = espacio.GetComponent<Renderer>();
+            var etiqueta = CanvasMundo($"Etiqueta_Tablero_{i + 1}", t, new Vector3(xs[i], Alto + 0.007f, -0.015f), 150, 40, false);
+            etiqueta.transform.localRotation = Quaternion.Euler(90, 0, 0); // acostada sobre la mesa
+            Txt(etiqueta, "Texto", $"Tablero {i + 1}", fSemi, 26, Color.white, 0, 0, 150, 40, TextAnchor.MiddleCenter);
+        }
+        consola.tableros = BuscarTableros();
+        consola.limiteMinimo = new Vector2(-0.84f, -0.2f);
+        consola.limiteMaximo = new Vector2(-0.28f, 0.2f);
+
+        var ficha = Pieza(t, PrimitiveType.Cylinder, "Ficha", new Vector3(-0.56f, Alto + 0.016f, -0.13f), new Vector3(0.06f, 0.012f, 0.06f), CrearMaterial("Consola_Ficha", Profesor), true);
+        var fichaInter = ficha.AddComponent<XRSimpleInteractable>();
+        fichaInter.interactionLayers = 1 | (1 << 1); // mano (Default) y rayo
+        consola.ficha = fichaInter;
+
+        // Pantalla del tablero (mismo estilo que los paneles Borrar / Exportar)
+        var pTab = Pantalla(t, "Pantalla_Tablero", new Vector3(-0.6f, Alto + 0.72f, 0.28f), PW, PH);
+        var fondoTab = Fondo(pTab, HER + "panel_exportar.png");
+        consola.pantallaTablero = pTab;
+        consola.tituloTablero = TituloPantalla(fondoTab, CON + "icono_tablero.png", "Tablero 1", Hex("6FE3D6"));
+        var acciones = Vacio(fondoTab, "Acciones", 0, 0, PW, PH);
+        consola.botonImportar = Pastilla(acciones, "Btn_Importar", CON + "boton_importar.png", "Importar", Color.white, FilaPastilla(0), sClick);
+        consola.botonExportar = Pastilla(acciones, "Btn_Exportar", HER + "boton_exportar.png", "Exportar", Hex("05302C"), FilaPastilla(1), Clip("ui_exportar", sClick));
+        consola.botonEliminar = Pastilla(acciones, "Btn_Eliminar", HER + "boton_borrar.png", "Eliminar", Color.white, FilaPastilla(2), Clip("ui_borrar", sClick));
+        consola.botonNueva = Pastilla(acciones, "Btn_Nueva", CON + "boton_nueva.png", "Nueva", Hex("3A2304"), FilaPastilla(3), sConfirmar);
+        consola.grupoAcciones = acciones;
+        var lista = Vacio(fondoTab, "Lista", 0, 0, PW, PH);
+        consola.botonesLista = new Button[3];
+        for (int i = 0; i < 3; i++)
+            consola.botonesLista[i] = Pastilla(lista, $"Btn_Imagen_{i + 1}", CON + "boton_imagen.png", "imagen", Color.white, FilaPastilla(i), sClick, 26);
+        consola.botonVolver = Pastilla(lista, "Btn_Volver", CON + "boton_volver.png", "Volver", Hex("2B333C"), FilaPastilla(3), sClick);
+        consola.grupoLista = lista;
+        consola.textoEstado = Txt(fondoTab, "Txt_Estado", "", fReg, 26, TextoSuave, 50, PH - 82, PW - 100, 44, TextAnchor.MiddleCenter);
+
+        // =================== APARTADO 1: GRABACIÓN ===================
+        var grabadora = root.AddComponent<GrabadoraClase>();
+        Pieza(t, PrimitiveType.Cylinder, "Base_Perilla", new Vector3(-0.05f, Alto + 0.005f, 0.05f), new Vector3(0.22f, 0.005f, 0.22f), matEspacio, false);
+        var perilla = new GameObject("Perilla_STOP_REC");
+        perilla.transform.SetParent(t, false);
+        perilla.transform.localPosition = new Vector3(-0.05f, Alto + 0.01f, 0.05f);
+        var col = perilla.AddComponent<BoxCollider>();
+        col.center = new Vector3(0, 0.07f, 0);
+        col.size = new Vector3(0.16f, 0.14f, 0.16f);
+        // De frente: dos barras (STOP). Girado 90°: un solo cuadrado (REC).
+        var matRec = CrearMaterial("Consola_Rec", Hex("D64545"));
+        Pieza(perilla.transform, PrimitiveType.Cube, "Bloque_Izquierdo", new Vector3(-0.035f, 0.07f, 0), new Vector3(0.045f, 0.12f, 0.12f), matRec, false);
+        Pieza(perilla.transform, PrimitiveType.Cube, "Bloque_Derecho", new Vector3(0.035f, 0.07f, 0), new Vector3(0.045f, 0.12f, 0.12f), matRec, false);
+        var perillaInter = perilla.AddComponent<XRSimpleInteractable>();
+        perillaInter.interactionLayers = 1 | (1 << 1);
+        grabadora.perilla = perillaInter;
+
+        // Pantalla de grabación (estilo del panel Borrar: borde rojo)
+        var pGrab = Pantalla(t, "Pantalla_Grabacion", new Vector3(0f, Alto + 0.72f, 0.28f), PW, PH);
+        var fondoGrab = Fondo(pGrab, HER + "panel_borrar.png");
+        TituloPantalla(fondoGrab, CON + "icono_grabar.png", "Grabación", Hex("FF8A8A"));
+        var punto = Img(fondoGrab, "Punto_Rec", 70, 205, 50, 50, Hex("E04848"));
+        punto.GetComponent<Image>().sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+        punto.GetComponent<Image>().type = Image.Type.Simple;
+        grabadora.pantalla = pGrab;
+        grabadora.puntoRec = punto.GetComponent<Image>();
+        grabadora.textoTiempo = Txt(fondoGrab, "Txt_Tiempo", "00:00", fBold, 120, Color.white, 120, 150, PW - 190, 160, TextAnchor.MiddleCenter);
+        grabadora.textoEstado = Txt(fondoGrab, "Txt_Estado", "", fReg, 28, TextoSuave, 60, 320, PW - 120, 90, TextAnchor.MiddleCenter);
+        grabadora.botonGuardar = Pastilla(fondoGrab, "Btn_Guardar", CON + "boton_guardar.png", "Guardar video", Hex("05302C"), FilaPastilla(3), sConfirmar);
+
+        // =================== APARTADO 3: FIGURAS ===================
+        Pieza(t, PrimitiveType.Cylinder, "Base_Boton_Figuras", new Vector3(0.3f, Alto + 0.01f, 0.02f), new Vector3(0.14f, 0.01f, 0.14f), matMesa, false);
+        var tapa = Pieza(t, PrimitiveType.Cylinder, "Boton_Figuras", new Vector3(0.3f, Alto + 0.035f, 0.02f), new Vector3(0.1f, 0.018f, 0.1f), CrearMaterial("Consola_Boton", Estudiante), true);
+        var tapaInter = tapa.AddComponent<XRSimpleInteractable>();
+        tapaInter.interactionLayers = 1 | (1 << 1);
+        consola.botonFiguras = tapaInter;
+        var etFig = CanvasMundo("Etiqueta_Figuras", t, new Vector3(0.3f, Alto + 0.007f, -0.1f), 150, 40, false);
+        etFig.transform.localRotation = Quaternion.Euler(90, 0, 0);
+        Txt(etFig, "Texto", "Figuras", fSemi, 26, Color.white, 0, 0, 150, 40, TextAnchor.MiddleCenter);
+        if (figuras != null)
+        {
+            // La pantalla de figuras se trae encima del botón (más pequeña) y empieza oculta.
+            Undo.RecordObject(figuras.transform, "Consola");
+            // Mismo ancho que las otras dos pantallas (0,56 m) y en la misma fila.
+            var rtFig = figuras.GetComponent<RectTransform>();
+            float anchoFig = rtFig != null && rtFig.rect.width > 1 ? rtFig.rect.width : 1347f;
+            figuras.transform.SetPositionAndRotation(
+                t.TransformPoint(new Vector3(0.6f, Alto + 0.72f, 0.28f)), rot * Quaternion.Euler(10, 0, 0));
+            figuras.transform.localScale = Vector3.one * (PW * U / anchoFig);
+            consola.pantallaFiguras = figuras;
+        }
+        else reporte.Add("? Consola: no encontré 'Canvas_Figuras'");
+
+        // =================== APARTADO 4: MANO LEVANTADA ===================
+        if (panelMano != null)
+        {
+            Undo.SetTransformParent(panelMano.transform, t, "Consola");
+            panelMano.transform.localPosition = new Vector3(0.68f, Alto + 0.22f, 0.08f);
+            panelMano.transform.localRotation = Quaternion.Euler(10, 0, 0);
+            panelMano.transform.localScale = Vector3.one * 0.6f;
+        }
+        else reporte.Add("? Consola: no encontré 'Panel_ManoLevantada' (corre Crear panel de mano levantada)");
+
+        // ---- Paneles viejos (Borrar / Exportar): se ocultan, no se borran ----
+        foreach (var viejo in new[] { "Connection Canvas (1)", "Connection Canvas (2)" })
+        {
+            var go = BuscarEnEscena(viejo);
+            if (go == null) continue;
+            Undo.RecordObject(go, "Consola");
+            go.SetActive(false);
+        }
+
+        EditorUtility.SetDirty(consola);
+        EditorUtility.SetDirty(grabadora);
+        reporte.Add($"✓ Consola del profesor: tableros ({consola.tableros.Length}), perilla STOP/REC, botón Figuras y mano levantada");
+        if (!System.IO.File.Exists(System.IO.Path.Combine(Application.streamingAssetsPath, "ffmpeg", "ffmpeg.exe")))
+            reporte.Add("! Para grabar, copia ffmpeg.exe en Assets/StreamingAssets/ffmpeg/");
+    }
+
+    /// <summary>Tablero 1 = Manager_Cara1, Tablero 2 = Manager_Cara2, Tablero 3 = Manager_Cara4
+    /// (Cara3 es la cara de control). Si falta alguna, las 3 primeras por nombre.</summary>
+    static CanvasManager[] BuscarTableros()
+    {
+        var todas = Object.FindObjectsByType<CanvasManager>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+            .Where(c => c.canvasTexture != null).OrderBy(c => c.gameObject.name).ToList();
+        var elegidas = new List<CanvasManager>();
+        foreach (var nombre in new[] { "Manager_Cara1", "Manager_Cara2", "Manager_Cara4" })
+        {
+            var c = todas.FirstOrDefault(m => m.gameObject.name == nombre);
+            if (c != null) elegidas.Add(c);
+        }
+        if (elegidas.Count < 3) elegidas = todas.Take(3).ToList();
+        return elegidas.ToArray();
+    }
+
+    static GameObject BuscarEnEscena(string nombre) =>
+        Resources.FindObjectsOfTypeAll<GameObject>()
+            .FirstOrDefault(g => g.name == nombre && g.scene == SceneManager.GetActiveScene());
+
+    static GameObject Pieza(Transform padre, PrimitiveType tipo, string nombre, Vector3 pos, Vector3 escala, Material mat, bool conCollider)
+    {
+        var go = GameObject.CreatePrimitive(tipo);
+        go.name = nombre;
+        go.transform.SetParent(padre, false);
+        go.transform.localPosition = pos;
+        go.transform.localScale = escala;
+        go.GetComponent<Renderer>().sharedMaterial = mat;
+        if (!conCollider) Object.DestroyImmediate(go.GetComponent<Collider>());
+        return go;
+    }
+
+    // ---------------- Pantallas de la consola (estilo de los paneles Borrar / Exportar) ----------------
+    const string HER = "Assets/UI/MenuHerramientas/";
+    const string CON = "Assets/UI/Consola/";
+    const float PW = 560, PH = 600; // tamaño de cada pantalla en píxeles de canvas (0,56 × 0,60 m)
+
+    /// <summary>Pantalla flotante inclinada 10° hacia el profesor.</summary>
+    static GameObject Pantalla(Transform padre, string nombre, Vector3 pos, float w, float h)
+    {
+        var c = CanvasMundo(nombre, padre, pos, w, h, true);
+        c.transform.localRotation = Quaternion.Euler(10, 0, 0);
+        return c;
+    }
+
+    /// <summary>Fondo con la imagen del panel (borde de color, degradado y sombra).</summary>
+    static GameObject Fondo(GameObject canvas, string sprite)
+    {
+        Rect(canvas, "Fondo", 0, 0, PW, PH, out var go);
+        var img = go.AddComponent<Image>();
+        img.sprite = SpriteUI(sprite);
+        img.type = Image.Type.Simple;
+        img.raycastTarget = false;
+        return go;
+    }
+
+    /// <summary>Ícono + título de color, centrados arriba (como "Borrar" / "Exportar").</summary>
+    static Text TituloPantalla(GameObject fondo, string icono, string texto, Color color)
+    {
+        var ic = Img(fondo, "Icono_Titulo", 120, 46, 64, 64, Color.white);
+        var img = ic.GetComponent<Image>();
+        img.sprite = SpriteUI(icono);
+        img.type = Image.Type.Simple;
+        img.preserveAspect = true;
+        return Txt(fondo, "Titulo", texto, fBold, 50, color, 196, 40, PW - 260, 76, TextAnchor.MiddleLeft);
+    }
+
+    /// <summary>Posición (x, y, ancho, alto) de la fila i de botones-pastilla.</summary>
+    static Vector4 FilaPastilla(int i) => new Vector4(60, 130 + i * 95, PW - 120, 88);
+
+    /// <summary>Botón-pastilla con la imagen del equipo (círculo con ícono a la izquierda y flecha a la derecha).</summary>
+    static Button Pastilla(GameObject padre, string nombre, string sprite, string texto, Color colorTexto, Vector4 r, AudioClip clic, int tam = 34)
+    {
+        Rect(padre, nombre, r.x, r.y, r.z, r.w, out var go);
+        var img = go.AddComponent<Image>();
+        img.sprite = SpriteUI(sprite);
+        img.type = Image.Type.Simple;
+        var b = go.AddComponent<Button>();
+        b.targetGraphic = img;
+        var c = b.colors;
+        c.normalColor = Hex("E0E0E0"); c.highlightedColor = Color.white; c.pressedColor = Hex("B0B0B0");
+        c.selectedColor = Hex("E0E0E0"); c.disabledColor = new Color(1, 1, 1, 0.35f); c.fadeDuration = 0.1f;
+        b.colors = c;
+        b.navigation = new Navigation { mode = Navigation.Mode.None };
+        var s = go.AddComponent<SonidoBoton>();
+        s.sonidoApuntar = sHover; s.sonidoClic = clic;
+        // El texto va a la derecha del círculo del ícono.
+        Txt(go, "Texto", texto, fSemi, tam, colorTexto, r.z * 0.22f, 0, r.z * 0.68f, r.w, TextAnchor.MiddleCenter);
+        return b;
+    }
+
+    static AudioClip Clip(string nombre, AudioClip siNoExiste)
+    {
+        var c = AssetDatabase.LoadAssetAtPath<AudioClip>(AUDIO + nombre + ".wav");
+        return c != null ? c : siNoExiste;
+    }
+
+    /// <summary>Carga un PNG como Sprite (si Unity lo importó como textura, lo cambia a Sprite).</summary>
+    static Sprite SpriteUI(string ruta)
+    {
+        if (AssetImporter.GetAtPath(ruta) == null) AssetDatabase.ImportAsset(ruta);
+        if (AssetImporter.GetAtPath(ruta) is TextureImporter ti &&
+            (ti.textureType != TextureImporterType.Sprite || ti.spriteImportMode != SpriteImportMode.Single))
+        {
+            ti.textureType = TextureImporterType.Sprite;
+            ti.spriteImportMode = SpriteImportMode.Single;
+            ti.mipmapEnabled = false;
+            ti.SaveAndReimport();
+        }
+        var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(ruta);
+        if (sprite == null) reporte.Add($"? No encontré la imagen '{ruta}'");
+        return sprite;
+    }
+
     /// <summary>Barra blanca centrada en el botón (para dibujar la X y el chulo). x, y desde el centro.</summary>
     static void Barra(GameObject boton, float x, float y, float largo, float grosor, float angulo)
     {
@@ -649,6 +945,71 @@ public static class ConfigurarMultijugador
         if (origen == null) { reporte.Add("? No encontré el XR Origin para configurar los rayos"); return; }
         if (origen.GetComponent<ManipularConRayo>() == null) Undo.AddComponent<ManipularConRayo>(origen.gameObject);
         reporte.Add("✓ Rayos: joystick acerca/aleja y gira lo agarrado (pausa la locomoción de esa mano)");
+        CorregirManos();
+    }
+
+    /// <summary>
+    /// Revisa que cada interactor (rayo, mano, poke, teletransporte) use los botones de SU control.
+    /// En el VR Player, el "Left Ray Interactor" venía marcado como mano derecha y leía el gatillo derecho,
+    /// por eso con la izquierda no se podía seleccionar nada. Se arregla cambiando la mano y cambiando cada
+    /// acción "XRI Right ..." por su pareja "XRI Left ..." (y al revés).
+    /// </summary>
+    static void CorregirManos()
+    {
+        var origen = Object.FindFirstObjectByType<Unity.XR.CoreUtils.XROrigin>();
+        if (origen == null) return;
+        int arreglados = 0;
+        foreach (var interactor in origen.GetComponentsInChildren<UnityEngine.XR.Interaction.Toolkit.Interactors.XRBaseInputInteractor>(true))
+        {
+            string mano = ManoPorNombre(interactor.transform);
+            if (mano == null) continue;
+            string otra = mano == "Left" ? "Right" : "Left";
+
+            var so = new SerializedObject(interactor);
+            bool cambio = false;
+            var manoProp = so.FindProperty("m_Handedness");
+            int valorMano = mano == "Left" ? (int)UnityEngine.XR.Interaction.Toolkit.Interactors.InteractorHandedness.Left
+                                           : (int)UnityEngine.XR.Interaction.Toolkit.Interactors.InteractorHandedness.Right;
+            if (manoProp != null && manoProp.intValue != valorMano) { manoProp.intValue = valorMano; cambio = true; }
+
+            var it = so.GetIterator();
+            while (it.Next(true))
+            {
+                if (it.propertyType != SerializedPropertyType.ObjectReference) continue;
+                if (!(it.objectReferenceValue is UnityEngine.InputSystem.InputActionReference referencia) || referencia.action == null) continue;
+                var mapa = referencia.action.actionMap;
+                if (mapa == null || !mapa.name.Contains(otra)) continue;
+                var pareja = BuscarReferencia(referencia, mapa.name.Replace(otra, mano), referencia.action.name);
+                if (pareja == null) continue;
+                it.objectReferenceValue = pareja;
+                cambio = true;
+            }
+            if (cambio) { so.ApplyModifiedProperties(); arreglados++; }
+        }
+        reporte.Add(arreglados > 0
+            ? $"✓ Manos: {arreglados} interactores ahora usan los botones de su propio control (la izquierda ya funciona)"
+            : "• Manos: cada interactor ya usaba los botones de su control");
+    }
+
+    static string ManoPorNombre(Transform t)
+    {
+        for (; t != null; t = t.parent)
+        {
+            string n = t.name.ToLowerInvariant();
+            if (n.Contains("left")) return "Left";
+            if (n.Contains("right")) return "Right";
+        }
+        return null;
+    }
+
+    /// <summary>Busca, en el mismo archivo de acciones, la referencia a "mapa/acción".</summary>
+    static UnityEngine.InputSystem.InputActionReference BuscarReferencia(UnityEngine.InputSystem.InputActionReference ejemplo, string mapa, string accion)
+    {
+        string ruta = AssetDatabase.GetAssetPath(ejemplo);
+        return AssetDatabase.LoadAllAssetsAtPath(ruta)
+            .OfType<UnityEngine.InputSystem.InputActionReference>()
+            .FirstOrDefault(r => r.action != null && r.action.actionMap != null &&
+                                 r.action.actionMap.name == mapa && r.action.name == accion);
     }
 
     // =====================================================================
