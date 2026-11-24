@@ -70,6 +70,7 @@ public static class ConfigurarMultijugador
         var spawns = CrearSpawnPoints(centro, radioCubo);
         CrearLobby(spawns);
         CrearPanelSala();
+        ConfigurarManoLevantada();
         AgregarManipulacionConRayo();
         ConfigurarObjetosCompartidos();
         ConfigurarPrefabsFiguras();
@@ -452,6 +453,191 @@ public static class ConfigurarMultijugador
         reporte.Add(mano != null
             ? "✓ Panel de sala (código + salir) en la muñeca izquierda"
             : "? Panel de sala creado suelto: no encontré VRRigReferences.leftHand, colócalo a mano");
+    }
+
+    // =====================================================================
+    // 6b. LEVANTAR LA MANO (cola de estudiantes para entrar al cubo)
+    // =====================================================================
+    const string MODELO_MANO = "Assets/Modelos y Codigo/Otros/PEPL.prefab";
+
+    [MenuItem("Cubo VR/Crear panel de mano levantada")]
+    static void MenuManoLevantada()
+    {
+        reporte = new List<string>();
+        CargarRecursos();
+        ConfigurarManoLevantada();
+        EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+        EditorUtility.DisplayDialog("Cubo VR", string.Join("\n", reporte) + "\n\nGuarda la escena con Ctrl+S.", "OK");
+    }
+
+    static void ConfigurarManoLevantada()
+    {
+        var sistemas = GameObject.Find("Network Systems");
+        var spawns = Object.FindFirstObjectByType<NetworkSpawnPoints>();
+        if (sistemas == null || spawns == null || spawns.profesorSpawn == null)
+        {
+            reporte.Add("? Mano levantada: falta 'Network Systems' o 'Spawn Points' (corre primero Configurar multijugador)");
+            return;
+        }
+        var mano = sistemas.GetComponent<ManoLevantada>();
+        if (mano == null) mano = Undo.AddComponent<ManoLevantada>(sistemas);
+
+        // Punto dentro del cubo para el estudiante aceptado (a un lado del profesor).
+        var invitado = spawns.transform.Find("Invitado_Spawn (interior del cubo)");
+        if (invitado == null)
+        {
+            var p = spawns.profesorSpawn;
+            invitado = Punto(spawns.transform, "Invitado_Spawn (interior del cubo)", p.position + p.right * 0.9f, p.forward);
+            Undo.RegisterCreatedObjectUndo(invitado.gameObject, "Mano levantada");
+        }
+        mano.puntoInvitado = invitado;
+
+        // Panel: se reconstruye debajo de la cara de control (Canvas_Figuras).
+        //        Si ya existía, se respeta donde lo hayas movido.
+        var viejo = GameObject.Find("Panel_ManoLevantada");
+        Vector3 posVieja = Vector3.zero;
+        Quaternion rotVieja = Quaternion.identity;
+        if (viejo != null)
+        {
+            posVieja = viejo.transform.position;
+            rotVieja = viejo.transform.rotation;
+            Undo.DestroyObjectImmediate(viejo);
+        }
+
+        var root = new GameObject("Panel_ManoLevantada");
+        Undo.RegisterCreatedObjectUndo(root, "Mano levantada");
+        var control = GameObject.Find("Canvas_Figuras");
+        if (viejo != null)
+        {
+            root.transform.SetPositionAndRotation(posVieja, rotVieja);
+        }
+        else if (control != null)
+        {
+            var rt = control.GetComponent<RectTransform>();
+            float medioAlto = rt != null ? rt.rect.height * rt.lossyScale.y * 0.5f : 0.6f;
+            // Debajo de la cara de control, un poco hacia el profesor (los canvas miran hacia -Z).
+            root.transform.SetPositionAndRotation(
+                control.transform.position - control.transform.up * (medioAlto + 0.4f) - control.transform.forward * 0.03f,
+                control.transform.rotation);
+        }
+        else
+        {
+            var p = spawns.profesorSpawn;
+            root.transform.SetPositionAndRotation(p.position + p.forward * 1.2f + Vector3.up * 1.3f,
+                Quaternion.LookRotation(p.forward, Vector3.up));
+            reporte.Add("? No encontré 'Canvas_Figuras': dejé el panel frente al profesor, muévelo a la cara de control");
+        }
+
+        // Diseño (sin fondo): el muñeco al centro, encima un globo de diálogo con "+N"
+        // y delante dos botones redondos: X (negar) y ✓ (aceptar). Abajo el nombre del estudiante.
+        // El canvas va delante del muñeco (hacia el profesor) para que los botones lo tapen un poco.
+        const float W = 520, H = 660;
+        var canvas = CanvasMundo("Canvas", root.transform, new Vector3(0, 0, -0.12f), W, H, true);
+        var circulo = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+
+        // Globo de diálogo (arriba a la derecha de la cabeza del muñeco)
+        var globo = Img(canvas, "Globo", 290, 10, 200, 120, Color.white);
+        var cola = Txt(globo, "Txt_Cola", "+1", fBold, 66, Profesor, 0, 0, 200, 120, TextAnchor.MiddleCenter);
+        // Colita del globo: un cuadrado girado 45° que asoma por abajo, apuntando al muñeco.
+        var colita = Img(globo, "Colita", 0, 0, 40, 40, Color.white);
+        colita.transform.SetAsFirstSibling(); // detrás del texto
+        colita.GetComponent<Image>().sprite = null;
+        var colitaRt = (RectTransform)colita.transform;
+        colitaRt.pivot = new Vector2(0.5f, 0.5f);
+        colitaRt.anchoredPosition = new Vector2(55, -112);
+        colitaRt.localRotation = Quaternion.Euler(0, 0, 45);
+
+        // Botones redondos delante del muñeco
+        const float D = 140;
+        var negar = Boton(canvas, "Btn_Negar", "", Peligro, Color.white, 95, 330, D, D, 10, sClick);
+        var aceptar = Boton(canvas, "Btn_Aceptar", "", Estudiante, Color.white, W - 95 - D, 330, D, D, 10, sConfirmar);
+        foreach (var b in new[] { negar, aceptar })
+        {
+            var img = b.GetComponent<Image>();
+            img.sprite = circulo;
+            img.type = Image.Type.Simple;
+        }
+        // X: dos barras cruzadas
+        Barra(negar.gameObject, 0, 0, 74, 16, 45);
+        Barra(negar.gameObject, 0, 0, 74, 16, -45);
+        // ✓ (chulo): barra corta + barra larga
+        Barra(aceptar.gameObject, -18, -8, 38, 16, -45);
+        Barra(aceptar.gameObject, 12, 2, 66, 16, 47);
+
+        // Nombre de quien levantó la mano
+        var etiqueta = Img(canvas, "Etiqueta", 60, 490, W - 120, 60, CardBg);
+        var mensaje = Txt(etiqueta, "Txt_Mensaje", "Estudiante 1", fSemi, 32, Color.white, 0, 0, W - 120, 60, TextAnchor.MiddleCenter);
+
+        // Sacar del cubo al estudiante que está dentro
+        var retirar = Boton(canvas, "Btn_Retirar", "Sacar del cubo", Profesor, Color.white, 20, 570, W - 40, 80, 30, sClick);
+
+        // Mini muñeco 3D al centro, detrás de los botones.
+        Transform pivote = null;
+        var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(MODELO_MANO);
+        if (prefab != null)
+        {
+            pivote = new GameObject("MiniModelo").transform;
+            pivote.SetParent(root.transform, false);
+            pivote.localPosition = new Vector3(0, 0.07f, -0.03f);
+            pivote.localRotation = Quaternion.Euler(0, 180, 0); // mirando al profesor
+
+            var modelo = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            modelo.transform.SetParent(pivote, false);
+            foreach (var c in modelo.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
+            var rends = modelo.GetComponentsInChildren<Renderer>(true);
+            if (rends.Length > 0)
+            {
+                var b = rends[0].bounds;
+                foreach (var r in rends) b.Encapsulate(r.bounds);
+                float escala = 0.30f / Mathf.Max(0.001f, b.size.y); // ~30 cm de alto
+                modelo.transform.localScale *= escala;
+                // Centrar el muñeco en el pivote (así late desde su centro).
+                b = rends[0].bounds;
+                foreach (var r in rends) b.Encapsulate(r.bounds);
+                modelo.transform.position += pivote.position - b.center;
+
+                // Los botones (el canvas) van siempre por delante del muñeco, con 5 cm de aire.
+                Vector3 f = root.transform.forward;
+                float medioFondo = Mathf.Abs(f.x) * b.extents.x + Mathf.Abs(f.y) * b.extents.y + Mathf.Abs(f.z) * b.extents.z;
+                var pc = canvas.transform.localPosition;
+                pc.z = pivote.localPosition.z - medioFondo - 0.05f;
+                canvas.transform.localPosition = pc;
+            }
+        }
+        else reporte.Add($"? No encontré el muñeco en '{MODELO_MANO}'");
+
+        var audio = root.AddComponent<AudioSource>();
+        audio.playOnAwake = false;
+        audio.spatialBlend = 1f;
+        audio.clip = sConfirmar;
+
+        mano.panel = root;
+        mano.miniModelo = pivote;
+        mano.globo = globo;
+        mano.textoCola = cola;
+        mano.textoMensaje = mensaje;
+        mano.botonAceptar = aceptar;
+        mano.botonNegar = negar;
+        mano.botonRetirar = retirar;
+        mano.sonidoAviso = audio;
+        EditorUtility.SetDirty(mano);
+        reporte.Add("✓ Mano levantada: panel bajo la cara de control + punto para el invitado dentro del cubo");
+    }
+
+    /// <summary>Barra blanca centrada en el botón (para dibujar la X y el chulo). x, y desde el centro.</summary>
+    static void Barra(GameObject boton, float x, float y, float largo, float grosor, float angulo)
+    {
+        var go = new GameObject("Trazo", typeof(RectTransform));
+        go.layer = boton.layer;
+        go.transform.SetParent(boton.transform, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(x, y);
+        rt.sizeDelta = new Vector2(largo, grosor);
+        rt.localRotation = Quaternion.Euler(0, 0, angulo);
+        var img = go.AddComponent<Image>();
+        img.color = Color.white;
+        img.raycastTarget = false;
     }
 
     // =====================================================================
